@@ -69,7 +69,7 @@ void FtpMirror::processNextFile()
     QTextStream(stdout) << "GET: " << pendingFilesInCurrDir.back().toUtf8() << endl;
 
     openedFilesInCurrDir.push_back(std::move(file));
-    m_ftp.get(pendingFilesInCurrDir.back(), file.get());
+    m_ftp.get(pendingFilesInCurrDir.back(), openedFilesInCurrDir.back().get());
     pendingFilesInCurrDir.removeLast();
 }
 
@@ -97,7 +97,16 @@ void FtpMirror::ftpInformsAboutNewFile(const QUrlInfo &urlInfo)
     {
         if (urlInfo.isReadable())
         {
-            pendingFilesInCurrDir.append(urlInfo.name());
+            QFileInfoList localFile
+                    = QDir(currentLocalPath).entryInfoList(QStringList(urlInfo.name()), QDir::Files | QDir::Hidden);
+            if (localFile.empty() || localFile[0].size() != urlInfo.size())
+            {
+                pendingFilesInCurrDir.append(urlInfo.name());
+            }
+            else
+            {
+                QTextStream(stdout) << "File " << urlInfo.name() << "hasn't changed." << endl;
+            }
         }
     }
     else if (urlInfo.isDir() &&
