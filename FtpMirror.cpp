@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QCoreApplication>
 #include <Utilities.h>
+#include <boost/filesystem/operations.hpp>
 
 FtpMirror::FtpMirror(QObject *parent)
     : QObject(parent)
@@ -57,38 +58,40 @@ void FtpMirror::processNextDirectory()
     m_ftp.list();
 }
 
-void FtpMirror::processNextFile()
-{
-    FileUnique file = createDownloadFile();
-
-    if (file.get() == nullptr)
-    {
-        return;
-    }
-
-    QTextStream(stdout) << "GET: " << pendingFilesInCurrDir.back().toUtf8() << endl;
-
-    openedFilesInCurrDir.push_back(std::move(file));
-    m_ftp.get(pendingFilesInCurrDir.back(), openedFilesInCurrDir.back().get());
-    pendingFilesInCurrDir.removeLast();
-}
-
 void FtpMirror::allFtpCommandsDone(bool errorOccured)
 {
+    closeOpenedFile();
+
     if (errorOccured)
     {
         QTextStream(stderr) << "Err: " << qPrintable(m_ftp.errorString()) << endl;
     }
 
-    if (not pendingFilesInCurrDir.empty())
+    if (pendingFilesInCurrDir.empty())
     {
-        processNextFile();
+        processNextDirectory();
     }
     else
     {
-        Utilities::dealocate(openedFilesInCurrDir);
-        processNextDirectory();
+        processNextFile();
     }
+}
+
+void FtpMirror::processNextFile()
+{
+    openedFile = createLocalDownloadFile();
+
+    if (openedFile.get() == nullptr)
+    {
+        QTextStream(stderr) << "Err: Cannot open/create local file: "
+                            << pendingFilesInCurrDir.back().name() << endl;
+        pendingFilesInCurrDir.removeLast();
+        return;
+    }
+
+    QTextStream(stdout) << "GET: " << pendingFilesInCurrDir.back().name() << endl;
+    m_ftp.get(pendingFilesInCurrDir.back().name(), openedFile.get()->getFile());
+    pendingFilesInCurrDir.removeLast();
 }
 
 void FtpMirror::ftpInformsAboutNewFile(const QUrlInfo &urlInfo)
@@ -97,15 +100,14 @@ void FtpMirror::ftpInformsAboutNewFile(const QUrlInfo &urlInfo)
     {
         if (urlInfo.isReadable())
         {
-            QFileInfoList localFile
-                    = QDir(currentLocalPath).entryInfoList(QStringList(urlInfo.name()), QDir::Files | QDir::Hidden);
-            if (localFile.empty() || localFile[0].size() != urlInfo.size())
+            QFileInfoList localFile = getInfoAboutLocalFile(urlInfo.name());
+            if (fileNeedsToBeDownloaded(localFile, urlInfo))
             {
-                pendingFilesInCurrDir.append(urlInfo.name());
+                pendingFilesInCurrDir.append(urlInfo);
             }
             else
             {
-                QTextStream(stdout) << "File " << urlInfo.name() << "hasn't changed." << endl;
+                QTextStream(stdout) << "File " << urlInfo.name() << " hasn't changed." << endl;
             }
         }
     }
@@ -120,7 +122,6 @@ void FtpMirror::ftpInformsAboutNewFile(const QUrlInfo &urlInfo)
 void FtpMirror::ftpDataTransferProgress(qint64 done, qint64 total)
 {
     Utilities::loadbar(done, total);
-
 }
 
 void FtpMirror::createConnections()
@@ -163,6 +164,24 @@ bool FtpMirror::validateUrl(const QUrl &url)
     return true;
 }
 
+void FtpMirror::closeOpenedFile()
+{
+    openedFile = nullptr;
+}
+
+QFileInfoList FtpMirror::getInfoAboutLocalFile(const QString &fileName)
+{
+    return QDir(currentLocalPath).
+            entryInfoList(QStringList(fileName), QDir::Files | QDir::Hidden);
+}
+
+bool FtpMirror::fileNeedsToBeDownloaded(const QFileInfoList &localFile, const QUrlInfo &urlInfo)
+{
+    return localFile.empty() ||
+           localFile[0].size() != urlInfo.size() ||
+           localFile[0].lastModified() != urlInfo.lastModified();
+}
+
 QString FtpMirror::getStartDir(const QUrl &url)
 {
     QString path = url.path();
@@ -173,17 +192,25 @@ QString FtpMirror::getStartDir(const QUrl &url)
     return path;
 }
 
-FileUnique FtpMirror::createDownloadFile()
+FileUnique FtpMirror::createLocalDownloadFile()
 {
-    FileUnique file(new QFile(currentLocalPath + "/" + pendingFilesInCurrDir.back()));
+    QString downloadFilePath = currentLocalPath + "/" + pendingFilesInCurrDir.back().name();
+    FileUnique file(new FileAutoSettingModifyTime(downloadFilePath, pendingFilesInCurrDir.back().lastModified()));
 
-    if (not file->open(QIODevice::WriteOnly))
+    if (not file->getFile()->open(QIODevice::WriteOnly))
     {
         QTextStream(stderr) << "Err: Cannot write file "
-             << qPrintable(QDir::toNativeSeparators(pendingFilesInCurrDir.back()))
+             << qPrintable(QDir::toNativeSeparators(pendingFilesInCurrDir.back().name()))
              << " : "
-             << qPrintable(file->errorString()) << endl;
+             << qPrintable(file->getFile()->errorString()) << endl;
         return nullptr;
     }
     return std::move(file);
+}
+
+
+FileAutoSettingModifyTime::~FileAutoSettingModifyTime()
+{
+    file.close();
+    boost::filesystem::last_write_time(file.fileName().toStdString(), modifyTime.toTime_t());
 }

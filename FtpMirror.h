@@ -6,8 +6,29 @@
 #include <QStringList>
 #include <memory>
 #include <QFile>
+#include <QFileInfo>
 
-using FileUnique = std::unique_ptr<QFile>;
+class FileAutoSettingModifyTime
+{
+public:
+    FileAutoSettingModifyTime(const QString& filePath, const QDateTime& modifyTimeToSet = {})
+        : file(filePath), modifyTime(modifyTimeToSet)
+    {
+    }
+
+    QFile * getFile()
+    {
+        return &file;
+    }
+
+    ~FileAutoSettingModifyTime();
+
+private:
+    QFile file;
+    QDateTime modifyTime;
+};
+
+using FileUnique = std::unique_ptr<FileAutoSettingModifyTime>;
 
 class FtpMirror : QObject
 {
@@ -33,15 +54,18 @@ private:
     void createConnections();
     void makeNewDirectoryAndCd();
     bool validateUrl(const QUrl &url);
+    void closeOpenedFile();
+    QFileInfoList getInfoAboutLocalFile(const QString& fileName);
+    bool fileNeedsToBeDownloaded(const QFileInfoList &localFile, const QUrlInfo &urlInfo);
     QString getStartDir(const QUrl &url);
-    FileUnique createDownloadFile();
+    FileUnique createLocalDownloadFile();
 
     FtpClient m_ftp;
     QString currentRemotePath;
     QString currentLocalPath;
     QStringList pendingDirs;
-    QStringList pendingFilesInCurrDir;
-    std::vector<FileUnique> openedFilesInCurrDir;
+    QList<QUrlInfo> pendingFilesInCurrDir;
+    FileUnique openedFile;
 };
 
 

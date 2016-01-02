@@ -7,12 +7,14 @@
 QT       += core network
 
 QT       -= gui
-                             # to disable some qtlib warnings
+                  # to disable some qtlib warnings
 QMAKE_CXXFLAGS += -std=c++11 -Wno-deprecated-register
 
+LIBS += -lboost_filesystem -lboost_system
+
 TARGET = ftpsync
-CONFIG   += console
-CONFIG   -= app_bundle
+
+CONFIG   += c++11
 
 TEMPLATE = app
 
