@@ -81,19 +81,25 @@ struct ParsedFtpLine
 };
 
 using FileInfoList = std::list<ParsedFtpLine>;
+using FileInfo = ParsedFtpLine;
 
 class FtpMirrorPoco
 {
 public:
     FtpMirrorPoco(const FtpData &ftpData);
     bool getDictionary(const std::string& dirPath);
-    FileInfoList getFileListFromDirectory(const std::string& dirPath);
+    FileInfoList getFileListFromCurrentDirectory();
     ~FtpMirrorPoco();
 private:
-    bool isDotOrDotDotDirectory(const std::string& file);
     ParsedFtpLine parseFtpListLine(const std::string& line);
-    void endWithSlash(std::string &path);
+    void selectNextDirToProcess();
     void downloadFilesFromCurrentDirectory(const FileInfoList& fileList);
+    void downloadOneFileFromCurrentDirectory(const FileInfo& fileInfo);
+    void createCurrentDirectoryInLocalFileSystem();
+    void initLocalFileStream(std::ofstream& localFileStream, const FileInfo& fileInfo);
+    void processLine(FileInfoList& fileList, const std::string& line);
+    std::string &endPathWithSlash(std::string &path);
+    std::string &makePathRelative(std::string &path);
 
     Poco::Net::FTPClientSession session;
     StringList dirsLeftToDownload;

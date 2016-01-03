@@ -15,7 +15,8 @@
 FtpMirrorPoco::FtpMirrorPoco(const FtpData& ftpData)
     : session(ftpData.host)
 {
-    session.setTimeout(Poco::Timespan(0, 0, 1, 0, 0));
+    auto oneSecondTimeout = Poco::Timespan(0, 0, 1, 0, 0);
+    session.setTimeout(oneSecondTimeout);
     session.login(ftpData.uname, ftpData.password);
     session.setWorkingDirectory(ftpData.dir);
 }
@@ -27,41 +28,25 @@ bool FtpMirrorPoco::getDictionary(const std::string& dirPath)
 
     while (not dirsLeftToDownload.empty())
     {
-        currDir = dirsLeftToDownload.back();
-        dirsLeftToDownload.pop_back();
-        FileInfoList fileListToDownload = getFileListFromDirectory(currDir);
+        selectNextDirToProcess();
+        auto fileListToDownload = getFileListFromCurrentDirectory();
         downloadFilesFromCurrentDirectory(fileListToDownload);
     }
 
     return 0;
 }
 
-FileInfoList FtpMirrorPoco::getFileListFromDirectory(const std::string &dirPath)
+FileInfoList FtpMirrorPoco::getFileListFromCurrentDirectory()
 {
-    std::cout << "ENTERING DIRECTORY : " << dirPath << std::endl;
-    session.setWorkingDirectory(dirPath);
-
     std::istream& fileListStream = session.beginList("", true);
 
     FileInfoList fileList;
     std::string line;
     while (std::getline(fileListStream, line))
     {
-        ParsedFtpLine parsedLine = parseFtpListLine(line);
-
-        if (parsedLine.isDir() && not parsedLine.isDotOrDotDotDir())
-        {
-            //std::cout << parsedLine.toStr();
-
-            std::cout << "ADDING DIR: " << dirPath + parsedLine.name << std::endl;
-
-            dirsLeftToDownload.push_back(dirPath + parsedLine.name + "/");
-        }
-        else if (parsedLine.isFile())
-        {
-            fileList.push_back(parsedLine);
-        }
+        processLine(fileList, line);
     }
+
     session.endList();
     return fileList;
 }
@@ -69,22 +54,6 @@ FileInfoList FtpMirrorPoco::getFileListFromDirectory(const std::string &dirPath)
 FtpMirrorPoco::~FtpMirrorPoco()
 {
     session.close();
-}
-
-bool FtpMirrorPoco::isDotOrDotDotDirectory(const std::string &file)
-{
-    if (file[0] == '.')
-    {
-        if (file.size() == 1)
-        {
-            return true;
-        }
-        else if (file.size() == 2 && file[1] == '.')
-        {
-            return true;
-        }
-    }
-    return false;
 }
 
 ParsedFtpLine FtpMirrorPoco::parseFtpListLine(const std::string &line)
@@ -98,32 +67,89 @@ ParsedFtpLine FtpMirrorPoco::parseFtpListLine(const std::string &line)
     return parsedFtpLine;
 }
 
-void FtpMirrorPoco::endWithSlash(std::string &path)
+void FtpMirrorPoco::downloadFilesFromCurrentDirectory(const FileInfoList &fileList)
+{
+    for (auto file : fileList)
+    {
+        downloadOneFileFromCurrentDirectory(file);
+    }
+}
+
+void FtpMirrorPoco::downloadOneFileFromCurrentDirectory(const FileInfo &fileInfo)
+{
+    std::cout << "DOWNLOADING FILE : " << fileInfo.name << std::endl;
+
+    session.setFileType(Poco::Net::FTPClientSession::TYPE_BINARY);
+    auto& inputFileStream = session.beginDownload(fileInfo.name);
+
+    createCurrentDirectoryInLocalFileSystem();
+
+    std::ofstream localFileStream;
+    initLocalFileStream(localFileStream, fileInfo);
+
+    Poco::StreamCopier::copyStream(inputFileStream, localFileStream);
+
+    session.endDownload();
+    localFileStream.close();
+
+    std::cout << "END OF DOWNLOADING FILE : " << fileInfo.name << std::endl;
+}
+
+void FtpMirrorPoco::createCurrentDirectoryInLocalFileSystem()
+{
+    Poco::File folder(makePathRelative(currDir));
+    if (not folder.exists())
+    {
+        folder.createDirectory();
+    }
+}
+
+void FtpMirrorPoco::initLocalFileStream(std::ofstream& localFileStream, const FileInfo &fileInfo)
+{
+    localFileStream.open(makePathRelative(endPathWithSlash(currDir)) + fileInfo.name,
+             std::ofstream::out | std::ofstream::app | std::ofstream::binary);
+}
+
+void FtpMirrorPoco::selectNextDirToProcess()
+{
+    currDir = dirsLeftToDownload.back();
+    dirsLeftToDownload.pop_back();
+    std::cout << "ENTERING DIRECTORY : " << currDir << std::endl;
+    session.setWorkingDirectory(currDir);
+}
+
+void FtpMirrorPoco::processLine(FileInfoList& fileList, const std::string& line)
+{
+    ParsedFtpLine parsedLine = parseFtpListLine(line);
+
+    if (parsedLine.isDir() && not parsedLine.isDotOrDotDotDir())
+    {
+        //std::cout << parsedLine.toStr();
+
+        std::cout << "ADDING DIR: " << currDir + parsedLine.name << std::endl;
+
+        dirsLeftToDownload.push_back(currDir + parsedLine.name + "/");
+    }
+    else if (parsedLine.isFile())
+    {
+        fileList.push_back(parsedLine);
+    }
+}
+
+std::string & FtpMirrorPoco::endPathWithSlash(std::string &path)
 {
     if (path[path.length()-1] != '/')
     {
         path += "/";
     }
+    return path;
 }
 
-void FtpMirrorPoco::downloadFilesFromCurrentDirectory(const FileInfoList &fileList)
+std::string & FtpMirrorPoco::makePathRelative(std::string &path)
 {
-    for (auto file : fileList)
+    if (path[0] != '.')
     {
-        std::cout << "DOWNLOADING FILE : " << file.name << std::endl;
-        session.setFileType(Poco::Net::FTPClientSession::TYPE_BINARY);
-        std::istream& is = session.beginDownload(file.name);
-        std::ofstream ofs;
-
-        Poco::File folder("." + currDir);
-        if (!folder.exists())
-        {
-            folder.createDirectory();
-        }
-        ofs.open("." + currDir + "/" + file.name, std::ofstream::out | std::ofstream::app | std::ofstream::binary);
-
-        Poco::StreamCopier::copyStream(is, ofs);
-        session.endDownload();
-        std::cout << "END OF DOWNLOADING FILE : " << file.name << std::endl;
+        path = "." + path;
     }
+    return path;
 }
