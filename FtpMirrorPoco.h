@@ -98,6 +98,8 @@ private:
     void createCurrentDirectoryInLocalFileSystem();
     void initLocalFileStream(std::ofstream& localFileStream, const FileInfo& fileInfo);
     void processLine(FileInfoList& fileList, const std::string& line);
+    void setFileModifiedTimeToServerOne(const FileInfo &fileInfo);
+    bool fileHasChanged(const FileInfo &fileInfo);
     std::string &endPathWithSlash(std::string &path);
     std::string &makePathRelative(std::string &path);
 

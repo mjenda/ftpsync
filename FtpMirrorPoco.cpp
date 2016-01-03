@@ -92,6 +92,8 @@ void FtpMirrorPoco::downloadOneFileFromCurrentDirectory(const FileInfo &fileInfo
     session.endDownload();
     localFileStream.close();
 
+    setFileModifiedTimeToServerOne(fileInfo);
+
     std::cout << "END OF DOWNLOADING FILE : " << fileInfo.name << std::endl;
 }
 
@@ -120,7 +122,7 @@ void FtpMirrorPoco::selectNextDirToProcess()
 
 void FtpMirrorPoco::processLine(FileInfoList& fileList, const std::string& line)
 {
-    ParsedFtpLine parsedLine = parseFtpListLine(line);
+    FileInfo parsedLine = parseFtpListLine(line);
 
     if (parsedLine.isDir() && not parsedLine.isDotOrDotDotDir())
     {
@@ -130,10 +132,40 @@ void FtpMirrorPoco::processLine(FileInfoList& fileList, const std::string& line)
 
         dirsLeftToDownload.push_back(currDir + parsedLine.name + "/");
     }
-    else if (parsedLine.isFile())
+    else if (parsedLine.isFile() && fileHasChanged(parsedLine))
     {
         fileList.push_back(parsedLine);
     }
+}
+
+void FtpMirrorPoco::setFileModifiedTimeToServerOne(const FileInfo &fileInfo)
+{
+    Poco::File file(makePathRelative(endPathWithSlash(currDir)) + fileInfo.name);
+    if (file.exists())
+    {
+        file.setLastModified(Poco::Timestamp::fromEpochTime(fileInfo.modifiedTime));
+    }
+}
+
+bool FtpMirrorPoco::fileHasChanged(const FileInfo &fileInfo)
+{
+    Poco::File file(makePathRelative(endPathWithSlash(currDir)) + fileInfo.name);
+    if (not file.exists())
+    {
+        return true;
+    }
+
+    if (file.getLastModified().epochTime() == fileInfo.modifiedTime)
+    {
+        std::cout << "FILE " << fileInfo.name  << " HASNT CHANGED!" << std::endl;
+        return false;
+    }
+    else
+    {
+        std::cout << "FILE " << fileInfo.name  << " HAS CHANGED!" << std::endl;
+        return true;
+    }
+
 }
 
 std::string & FtpMirrorPoco::endPathWithSlash(std::string &path)
