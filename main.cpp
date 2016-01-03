@@ -14,7 +14,7 @@ int main()
     std::getline(dataFile, ftpData.password);
 
     FtpMirrorPoco ftpClient(ftpData);
-    ftpClient.getDictionary();
+    ftpClient.getDictionary("/test/");
 
     dataFile.close();
 }

@@ -6,6 +6,7 @@
 #include <list>
 #include <sstream>
 #include <ftpparse.h>
+#include <iostream>
 
 struct FtpData;
 
@@ -23,7 +24,8 @@ struct ParsedFtpLine
           modifiedTime(parsedLine.mtime),
           idType(parsedLine.idtype),
           id(parsedLine.id, parsedLine.idlen)
-    {}
+    {
+    }
 
     std::string name;
     bool        flagTryCwd;
@@ -78,18 +80,24 @@ struct ParsedFtpLine
     }
 };
 
+using FileInfoList = std::list<ParsedFtpLine>;
+
 class FtpMirrorPoco
 {
 public:
     FtpMirrorPoco(const FtpData &ftpData);
-    bool getDictionary();
-    StringList getFileListFromDirectory(const std::string& dirPath);
-
+    bool getDictionary(const std::string& dirPath);
+    FileInfoList getFileListFromDirectory(const std::string& dirPath);
+    ~FtpMirrorPoco();
 private:
     bool isDotOrDotDotDirectory(const std::string& file);
     ParsedFtpLine parseFtpListLine(const std::string& line);
+    void endWithSlash(std::string &path);
+    void downloadFilesFromCurrentDirectory(const FileInfoList& fileList);
 
     Poco::Net::FTPClientSession session;
+    StringList dirsLeftToDownload;
+    std::string currDir;
 };
 
 #endif // FTPMIRRORPOCO_H
