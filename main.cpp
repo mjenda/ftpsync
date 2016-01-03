@@ -1,39 +1,21 @@
-#include <QCoreApplication>
-#include <QTextStream>
-#include <QFtp>
-#include <QUrl>
-#include <QDebug>
-#include <FtpMirror.h>
-#include <QTextCodec>
+#include <FtpMirrorPoco.h>
+#include <FtpData.h>
+#include <iostream>
+#include <fstream>
 
-
-QUrl getUrlFromFile()
+int main()
 {
-    QFile userData("../../ftpsync/user.dat");
-    if (not userData.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        qDebug() << "Cannot open file.";
-        return QUrl();
-    }
+    std::ifstream dataFile;
+    dataFile.open("user.dat");
+    FtpData ftpData;
+    std::getline(dataFile, ftpData.host);
+    std::getline(dataFile, ftpData.dir);
+    std::getline(dataFile, ftpData.uname);
+    std::getline(dataFile, ftpData.password);
 
-    QTextStream in(&userData);
+    FtpMirrorPoco ftpClient(ftpData);
+    ftpClient.getDictionary();
 
-    QUrl url(in.readLine());
-    url.setUserName(in.readLine());
-    url.setPassword(in.readLine());
-    url.port(in.readLine().toInt());
-
-    return url;
-}
-
-int main(int argc, char *argv[])
-{
-    QCoreApplication a(argc, argv);
-    QTextCodec::setCodecForCStrings( QTextCodec::codecForName("UTF-8") );
-
-    FtpMirror ftp;
-    ftp.getDictionary(getUrlFromFile());
-
-    return a.exec();
+    dataFile.close();
 }
 

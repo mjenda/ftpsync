@@ -4,11 +4,16 @@
 #
 #-------------------------------------------------
 
-QT       += core network
+QT       -= core gui
 
-QT       -= gui
+CONFIG   += console c++11
+CONFIG   -= app_bundle
+
                              # to disable some qtlib warnings
-QMAKE_CXXFLAGS += -std=c++11 -Wno-deprecated-register
+#QMAKE_CXXFLAGS += -std=c++11         -lPocoNet -lPocoFoundation
+QMAKE_CXXFLAGS += -std=c++11
+
+LIBS += -lPocoNet -lPocoFoundation
 
 TARGET = ftpsync
 CONFIG   += console
@@ -18,11 +23,10 @@ TEMPLATE = app
 
 
 SOURCES += main.cpp \
-    FtpMirror.cpp \
-    Utilities.cpp \
-    FtpClient.cpp
+    FtpMirrorPoco.cpp \
+    ftpparse.c
 
 HEADERS += \
-    FtpMirror.h \
-    Utilities.h \
-    FtpClient.h
+    FtpMirrorPoco.h \
+    FtpData.h \
+    ftpparse.h
