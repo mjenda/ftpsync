@@ -5,10 +5,10 @@
 
 struct FtpData
 {
-    std::string dir = "/test/";
-    std::string host = "mjenda.vxm.pl";
-    std::string uname = "sync@mjenda.vxm.pl";
-    std::string password = "(hoLabrIse)!29";
+    std::string dir;
+    std::string host;
+    std::string uname;
+    std::string password;
 };
 
 #endif // FTPDATA_H
